@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- Runtime Fundamentals, experiment 1: Async scope.
+       Q1: does the main flow see what Async changes?  Q2: what happens when Async fails? -->
+  <flow name="runtime-async-flow">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/async" doc:name="Listener"/>
+    <set-payload value="#[output application/json --- { orderId: 'ORD-1' }]" doc:name="Set order"/>
+    <set-variable variableName="beforeAsync" value="start" doc:name="Set beforeAsync"/>
+    <logger level="INFO" message="MAIN before async" doc:name="Log main before"/>
+
+    <async doc:name="Async">
+      <set-variable variableName="insideAsync" value="changed in async" doc:name="Set insideAsync"/>
+      <set-payload value="payload changed in async" doc:name="Set payload in async"/>
+      <logger level="INFO" message="ASYNC" doc:name="Log async thread"/>
+    </async>
+
+    <logger level="INFO" message="MAIN after async" doc:name="Log main after"/>
+    <set-payload value="#[output application/json --- { payload: payload, beforeAsync: vars.beforeAsync, insideAsync: vars.insideAsync default 'NOT VISIBLE' }]" doc:name="Show what main sees"/>
+  </flow>
+
+  <!-- Experiment 1, part 2: a step inside Async fails. The main flow has its own handler;
+       if the response says HANDLER CAUGHT IT, Async errors reach the main flow. -->
+  <flow name="runtime-async-fail-flow">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/async-fail" doc:name="Listener"/>
+    <logger level="INFO" message="MAIN before async-fail" doc:name="Log main before"/>
+    <async doc:name="Async">
+      <logger level="INFO" message="ASYNC about to fail" doc:name="Log async start"/>
+      <raise-error type="APP:ASYNC_FAILED" description="Async step failed" doc:name="Fail inside async"/>
+      <logger level="INFO" message="ASYNC after failure (should never print)" doc:name="Log after failure"/>
+    </async>
+    <logger level="INFO" message="MAIN after async-fail" doc:name="Log main after"/>
+    <set-payload value="#[output application/json --- { result: 'MAIN FINISHED NORMALLY' }]" doc:name="Normal response"/>
+    <error-handler>
+      <on-error-continue type="APP:ASYNC_FAILED" logException="true" doc:name="Main handler">
+        <set-payload value="#[output application/json --- { result: 'MAIN HANDLER CAUGHT IT' }]" doc:name="Handler response"/>
+      </on-error-continue>
+    </error-handler>
+  </flow>
+
+  <!-- Same failure, but a Try with Continue inside the Async handles it there. -->
+  <flow name="runtime-async-fail-handled-flow">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/async-fail-handled" doc:name="Listener"/>
+    <logger level="INFO" message="MAIN before async-fail-handled" doc:name="Log main before"/>
+    <async doc:name="Async">
+      <try doc:name="Try inside async">
+        <raise-error type="APP:ASYNC_FAILED" description="Async step failed" doc:name="Fail inside async"/>
+        <error-handler>
+          <on-error-continue type="APP:ASYNC_FAILED" logException="true" doc:name="Handle inside async">
+            <logger level="WARN" message="ASYNC handled its own failure" doc:name="Log handled"/>
+          </on-error-continue>
+        </error-handler>
+      </try>
+      <logger level="INFO" message="ASYNC continued after handled failure" doc:name="Log async continued"/>
+    </async>
+    <logger level="INFO" message="MAIN after async-fail-handled" doc:name="Log main after"/>
+    <set-payload value="#[output application/json --- { result: 'MAIN FINISHED NORMALLY' }]" doc:name="Normal response"/>
+  </flow>
+</mule>

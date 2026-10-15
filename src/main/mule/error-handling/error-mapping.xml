@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="error-mapping-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/mapping">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <http:request doc:name="Call inventory" method="GET" url="http://localhost:9999/inventory" sendBodyMode="NEVER">
+      <error-mapping sourceType="HTTP:CONNECTIVITY" targetType="APP:INVENTORY_UNAVAILABLE"/>
+    </http:request>
+    <error-handler>
+      <on-error-propagate doc:name="Inventory unavailable" type="APP:INVENTORY_UNAVAILABLE" logException="true">
+        <logger level="INFO" message="#[ 'Mapped handler matched; error type now: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ]"/>
+        <set-variable variableName="httpStatus" value="#[503]"/>
+        <set-payload value="INVENTORY_UNAVAILABLE: inventory service is not reachable"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Anything else" type="ANY" logException="true">
+        <set-variable variableName="httpStatus" value="#[500]"/>
+        <set-payload value="INTERNAL_ERROR: unexpected failure"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

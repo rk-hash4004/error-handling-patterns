@@ -1,0 +1,25 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd                           http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <http:request-config doc:name="HTTP Request configuration (inventory)" name="Inventory_Request_config">
+    <http:request-connection host="localhost" port="9999">
+      <reconnection>
+        <reconnect count="3" frequency="1000"></reconnect>
+      </reconnection>
+    </http:request-connection>
+  </http:request-config>
+  <flow name="reconnection-flow">
+    <http:listener config-ref="HTTP_Listener_config" doc:name="Listener" path="/errors/reconnection">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <logger category="app.orders" doc:name="Before call" level="INFO" message="#['Reconnection demo: starting at ' ++ (now() as String {format: 'HH:mm:ss.SSS'})]"></logger>
+    <http:request config-ref="Inventory_Request_config" doc:name="Call inventory" method="GET" path="/inventory" sendBodyMode="NEVER"></http:request>
+    <error-handler>
+      <on-error-propagate doc:name="Show final error type" logException="true" type="ANY">
+        <logger category="app.orders" level="INFO" message="#[ 'Reconnection demo: gave up at ' ++ (now() as String {format: 'HH:mm:ss.SSS'}) ++ '; error type: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ]"></logger>
+        <set-variable value="#[503]" variableName="httpStatus"></set-variable>
+        <set-payload value="#[ 'SERVICE_UNAVAILABLE: final error type ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ]"></set-payload>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

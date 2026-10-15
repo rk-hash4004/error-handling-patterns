@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="retry-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/retry">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <logger doc:name="Before retry scope" level="INFO" category="app.orders" message="#['Retry demo: starting at ' ++ (now() as String {format: 'HH:mm:ss.SSS'})]"/>
+    <until-successful doc:name="Retry inventory call" maxRetries="3" millisBetweenRetries="1000">
+      <logger doc:name="Attempt" level="INFO" category="app.orders" message="#['Retry demo: attempt at ' ++ (now() as String {format: 'HH:mm:ss.SSS'})]"/>
+      <http:request doc:name="Call inventory" method="GET" url="http://localhost:9999/inventory" sendBodyMode="NEVER"/>
+    </until-successful>
+    <error-handler>
+      <on-error-propagate doc:name="Retries used up" type="MULE:RETRY_EXHAUSTED" logException="true">
+        <logger level="INFO" category="app.orders" message="#[ 'Retry demo: gave up; error type: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ]"/>
+        <set-variable variableName="httpStatus" value="#[503]"/>
+        <set-payload value="SERVICE_UNAVAILABLE: inventory still down after retries"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Anything else" type="ANY" logException="true">
+        <set-variable variableName="httpStatus" value="#[500]"/>
+        <set-payload value="INTERNAL_ERROR: unexpected failure"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

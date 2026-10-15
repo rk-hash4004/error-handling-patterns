@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="global-handler-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/handlers/global">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+    <error-handler ref="global-error-handler"/>
+  </flow>
+  <flow name="global-handler-reuse-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/handlers/global-reuse">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <raise-error doc:name="Invalid order" type="APP:INVALID_ORDER" description="Order is invalid"/>
+    <error-handler ref="global-error-handler"/>
+  </flow>
+  <flow name="default-handler-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/handlers/default">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+  </flow>
+  <flow name="local-override-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/handlers/local-override">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+    <error-handler>
+      <on-error-propagate doc:name="Local handler" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger level="INFO" message="Local handler matched, default handler skipped"/>
+        <set-variable variableName="httpStatus" value="#[422]"/>
+        <set-payload value="LOCAL: flow's own handler won over the default"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

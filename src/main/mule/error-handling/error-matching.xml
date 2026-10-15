@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="error-matching-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/matching/by-type">
+      <http:response statusCode="#[vars.httpStatus default 200]"/>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <choice doc:name="Choose deliberate error">
+      <when expression="#[attributes.queryParams.scenario == 'missing']">
+        <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+      </when>
+      <when expression="#[attributes.queryParams.scenario == 'invalid']">
+        <raise-error doc:name="Invalid order" type="APP:INVALID_ORDER" description="Order is invalid"/>
+      </when>
+      <otherwise>
+        <raise-error doc:name="Unexpected demo error" type="APP:UNEXPECTED_FAILURE" description="Unexpected demo failure"/>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate doc:name="Match missing order" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger level="INFO" message="Matched APP:ORDER_NOT_FOUND handler"/>
+        <set-variable variableName="httpStatus" value="#[404]"/>
+        <set-payload value="ORDER_NOT_FOUND: specific handler matched"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Match invalid order" type="APP:INVALID_ORDER" logException="true">
+        <logger level="INFO" message="Matched APP:INVALID_ORDER handler"/>
+        <set-variable variableName="httpStatus" value="#[400]"/>
+        <set-payload value="INVALID_ORDER: specific handler matched"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Match remaining errors" type="ANY" logException="true">
+        <logger level="INFO" message="Matched ANY handler"/>
+        <set-variable variableName="httpStatus" value="#[500]"/>
+        <set-payload value="INTERNAL_ERROR: ANY handler matched"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+  <flow name="conditional-matching-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/matching/by-condition">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <set-variable doc:name="Capture optional lookup flag" variableName="optionalLookup" value="#[attributes.queryParams.optional == 'true']"/>
+    <flow-ref doc:name="Lookup order" name="lookup-order-conditional-flow"/>
+    <logger doc:name="Caller resumed" level="INFO" message="Conditional caller resumed with fallback"/>
+    <set-payload doc:name="Use fallback in caller response" value="#[ 'Caller resumed using fallback: ' ++ (payload as String) ]"/>
+  </flow>
+
+  <flow name="lookup-order-conditional-flow">
+    <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+    <error-handler>
+      <on-error-continue doc:name="Recover optional lookup" type="APP:ORDER_NOT_FOUND" when="#[vars.optionalLookup == true]" logException="true">
+        <logger level="INFO" message="Matched conditional Continue: lookup is optional"/>
+        <set-payload doc:name="Fallback" value="No optional order available"/>
+      </on-error-continue>
+      <on-error-propagate doc:name="Fail required lookup" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger level="INFO" message="Matched Propagate: lookup is required"/>
+        <set-variable variableName="httpStatus" value="#[404]"/>
+        <set-payload value="ORDER_NOT_FOUND: required lookup failed"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+  <flow name="error-hierarchy-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/matching/hierarchy">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <http:request doc:name="Trigger real connectivity error" method="GET" url="http://localhost:9999/dead-endpoint" sendBodyMode="NEVER"/>
+    <error-handler>
+      <on-error-propagate doc:name="Match connectivity parent type" type="MULE:CONNECTIVITY" logException="true">
+        <logger doc:name="Show original type and matched parent" level="INFO" message="#[ 'Matched MULE:CONNECTIVITY parent handler; actual error: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ]"/>
+        <set-variable variableName="httpStatus" value="#[503]"/>
+        <set-payload value="SERVICE_UNAVAILABLE: MULE:CONNECTIVITY parent handler matched HTTP:CONNECTIVITY"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Catch other errors" type="ANY" logException="true">
+        <logger level="INFO" message="Hierarchy demo matched ANY handler"/>
+        <set-variable variableName="httpStatus" value="#[500]"/>
+        <set-payload value="INTERNAL_ERROR: hierarchy demo ANY handler matched"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

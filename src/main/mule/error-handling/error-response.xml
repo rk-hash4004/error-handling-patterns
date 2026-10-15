@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="error-response-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/response">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <choice doc:name="Choose scenario">
+      <when expression="#[attributes.queryParams.scenario == 'missing']">
+        <raise-error doc:name="Order missing" type="APP:ORDER_NOT_FOUND" description="Order 404 does not exist"/>
+      </when>
+      <when expression="#[attributes.queryParams.scenario == 'invalid']">
+        <raise-error doc:name="Order invalid" type="APP:INVALID_ORDER" description="orderId is required"/>
+      </when>
+      <otherwise>
+        <http:request doc:name="Real technical failure" method="GET" url="http://localhost:9999/dead-endpoint" sendBodyMode="NEVER"/>
+      </otherwise>
+    </choice>
+    <error-handler ref="api-error-handler"/>
+  </flow>
+</mule>

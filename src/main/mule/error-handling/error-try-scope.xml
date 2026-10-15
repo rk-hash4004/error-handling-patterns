@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="try-continue-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/try/continue"/>
+    <logger doc:name="Before Try" level="INFO" message="Try demo: before Try"/>
+    <try doc:name="Recover optional lookup locally">
+      <raise-error doc:name="Optional order missing" type="APP:ORDER_NOT_FOUND" description="Optional order not found"/>
+      <logger doc:name="Skipped inside Try" level="INFO" message="Try demo: inside Try after error (should not run)"/>
+      <error-handler>
+        <on-error-continue doc:name="Recover within Try" type="APP:ORDER_NOT_FOUND" logException="true">
+          <logger doc:name="Try handler" level="INFO" message="Try demo: Continue handler supplied fallback"/>
+          <set-payload doc:name="Fallback" value="No optional order available"/>
+        </on-error-continue>
+      </error-handler>
+    </try>
+    <logger doc:name="After Try" level="INFO" message="Try demo: flow resumed after Try"/>
+    <set-payload doc:name="Use fallback" value="#[ 'Flow continued after Try using fallback: ' ++ (payload as String) ]"/>
+  </flow>
+  <flow name="try-propagate-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/try/propagate">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <logger doc:name="Before Try" level="INFO" message="Try propagate demo: before Try"/>
+    <try doc:name="Try that propagates">
+      <raise-error doc:name="Required order missing" type="APP:ORDER_NOT_FOUND" description="Required order not found"/>
+      <error-handler>
+        <on-error-propagate doc:name="Log and rethrow" type="APP:ORDER_NOT_FOUND" logException="true">
+          <logger doc:name="Try handler" level="INFO" message="Try propagate demo: Try handler rethrowing"/>
+        </on-error-propagate>
+      </error-handler>
+    </try>
+    <logger doc:name="Skipped after Try" level="INFO" message="Try propagate demo: after Try (should not run)"/>
+    <error-handler>
+      <on-error-propagate doc:name="Flow-level handler" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger doc:name="Flow handler" level="INFO" message="Try propagate demo: flow-level handler caught error from Try"/>
+        <set-variable variableName="httpStatus" value="#[404]"/>
+        <set-payload value="ORDER_NOT_FOUND: flow handler caught error propagated from Try"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

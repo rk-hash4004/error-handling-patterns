@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="error-logging-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/logging">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <logger doc:name="Request received" level="INFO" category="app.orders" message="#[ 'Payment request received, orderId=' ++ (attributes.queryParams.orderId default 'none') ]"/>
+    <raise-error doc:name="Payment declined" type="APP:PAYMENT_FAILED" description="Payment was declined"/>
+    <error-handler>
+      <on-error-propagate doc:name="Log structured error" type="ANY" logException="true">
+        <logger doc:name="Structured error log" level="ERROR" category="app.orders.errors" message="#[output application/json indent=false var card = (attributes.queryParams.cardNumber default '') --- {event: 'ORDER_ERROR', correlationId: correlationId, flow: flow.name, errorType: (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String), description: error.description, orderId: attributes.queryParams.orderId default 'none', card: if (sizeOf(card) &gt; 4) '****' ++ card[-4 to -1] else '****'}]"/>
+        <set-variable variableName="httpStatus" value="#[402]"/>
+        <set-payload value="#[ 'PAYMENT_FAILED: ' ++ error.description ++ ' (ref ' ++ correlationId ++ ')' ]"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

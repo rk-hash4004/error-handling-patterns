@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+  <!-- Runtime Fundamentals, experiment 2: target variable.
+       Q1: with target, what happens to the payload?  Q2: with target, are variables set inside the called flow visible? -->
+  <flow name="runtime-target-flow">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/target" doc:name="Listener"/>
+    <set-payload value="#[output application/json --- { orderId: 'ORD-1', sku: 'SKU-9' }]" doc:name="Set order"/>
+
+    <!-- Call 1: WITH target -->
+    <flow-ref name="runtime-pricing-lookup-flow" target="pricing" doc:name="Lookup WITH target"/>
+    <set-variable variableName="payloadAfterTarget" value="#[payload]" doc:name="Save payload after target call"/>
+    <set-variable variableName="innerVarAfterTarget" value="#[vars.pricingLookupRan default 'NOT VISIBLE']" doc:name="Save inner var after target call"/>
+    <remove-variable variableName="pricingLookupRan" doc:name="Reset inner var"/>
+
+    <!-- Call 2: WITHOUT target -->
+    <flow-ref name="runtime-pricing-lookup-flow" doc:name="Lookup WITHOUT target"/>
+
+    <set-payload value="#[output application/json --- {
+        withTarget: { payloadAfterCall: vars.payloadAfterTarget, resultInVariable: vars.pricing, innerVarVisible: vars.innerVarAfterTarget },
+        withoutTarget: { payloadAfterCall: payload, innerVarVisible: vars.pricingLookupRan default 'NOT VISIBLE' }
+      }]" doc:name="Show both results"/>
+  </flow>
+
+  <flow name="runtime-pricing-lookup-flow">
+    <set-variable variableName="pricingLookupRan" value="yes" doc:name="Set inner var"/>
+    <set-payload value="#[output application/json --- { price: 100, currency: 'INR' }]" doc:name="Set price result"/>
+  </flow>
+</mule>

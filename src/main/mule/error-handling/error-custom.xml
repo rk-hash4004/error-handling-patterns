@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="custom-errors-flow">
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/errors/custom">
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+      </http:error-response>
+    </http:listener>
+    <choice doc:name="Check business rules">
+      <when expression="#[isEmpty(attributes.queryParams.orderId)]">
+        <raise-error doc:name="Order id missing" type="APP:INVALID_ORDER" description="orderId is required"/>
+      </when>
+      <when expression="#[attributes.queryParams.orderId == '404']">
+        <raise-error doc:name="Order not found" type="APP:ORDER_NOT_FOUND" description="Order 404 does not exist"/>
+      </when>
+      <when expression="#[(attributes.queryParams.amount default '0') as Number &gt; 1000]">
+        <raise-error doc:name="Limit exceeded" type="APP:PAYMENT_LIMIT_EXCEEDED" description="Amount is above the 1000 limit"/>
+      </when>
+      <otherwise>
+        <set-payload doc:name="Order accepted" value="Order accepted"/>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate doc:name="Invalid order" type="APP:INVALID_ORDER" logException="true">
+        <set-variable variableName="httpStatus" value="#[400]"/>
+        <set-payload value="#[ 'INVALID_ORDER: ' ++ error.description ]"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Order not found" type="APP:ORDER_NOT_FOUND" logException="true">
+        <set-variable variableName="httpStatus" value="#[404]"/>
+        <set-payload value="#[ 'ORDER_NOT_FOUND: ' ++ error.description ]"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Limit exceeded" type="APP:PAYMENT_LIMIT_EXCEEDED" logException="true">
+        <set-variable variableName="httpStatus" value="#[422]"/>
+        <set-payload value="#[ 'PAYMENT_LIMIT_EXCEEDED: ' ++ error.description ]"/>
+      </on-error-propagate>
+      <on-error-propagate doc:name="Anything else" type="ANY" logException="true">
+        <set-variable variableName="httpStatus" value="#[500]"/>
+        <set-payload value="INTERNAL_ERROR: unexpected failure"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081"/>
+	</http:listener-config>
+
+
+	<error-handler name="api-error-handler">
+		<on-error-propagate doc:name="Standard JSON error response" type="ANY" logException="true">
+			<set-variable variableName="httpStatus" value="#[{ORDER_NOT_FOUND: 404, INVALID_ORDER: 400, INVENTORY_UNAVAILABLE: 503}[(error.errorType.identifier default '')] default 500]"/>
+			<set-payload mimeType="application/json" value="#[output application/json --- {errorCode: if (error.errorType.namespace == 'APP') error.errorType.identifier else 'INTERNAL_ERROR', message: if (error.errorType.namespace == 'APP') error.description else 'An unexpected error occurred', correlationId: correlationId, timestamp: now()}]"/>
+		</on-error-propagate>
+	</error-handler>
+
+	<error-handler name="global-error-handler">
+		<on-error-propagate doc:name="Global: missing order" type="APP:ORDER_NOT_FOUND" logException="true">
+			<logger level="INFO" message="Global handler matched APP:ORDER_NOT_FOUND"/>
+			<set-variable variableName="httpStatus" value="#[404]"/>
+			<set-payload value="ORDER_NOT_FOUND: global handler matched"/>
+		</on-error-propagate>
+		<on-error-propagate doc:name="Global: everything else" type="ANY" logException="true">
+			<logger level="INFO" message="Global handler matched ANY"/>
+			<set-variable variableName="httpStatus" value="#[500]"/>
+			<set-payload value="INTERNAL_ERROR: global handler matched"/>
+		</on-error-propagate>
+	</error-handler>
+
+</mule>

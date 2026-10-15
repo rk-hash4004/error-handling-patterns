@@ -1,0 +1,43 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd  http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+  <flow name="error-flow">
+    <http:listener config-ref="HTTP_Listener_config" doc:id="uvzvej" doc:name="Listener" path="/errors/raise"></http:listener>
+    <raise-error doc:id="pngkbq" doc:name="Raise error" type="APP:ORDER_NOT_FOUND" description="Order not found"></raise-error>
+  </flow>
+  <flow name="connectivity-error-flow">
+    <http:listener doc:name="Listener" doc:id="uuyzib" path="/errors/connectivity" config-ref="HTTP_Listener_config"/>
+    <http:request doc:name="Request" doc:id="gmoqpy" method="GET" url="http://localhost:9999/dead-endpoint"/></flow>
+  <flow name="handler-behavior-flow">
+    <http:listener doc:name="Listener" path="/errors/continue-vs-propagate/continue" config-ref="HTTP_Listener_config"/>
+    <flow-ref doc:name="Process order" name="process-order-flow"/>
+    <logger doc:name="Parent resumed" level="INFO" message="Parent resumed after process-order-flow"/>
+    <set-payload doc:name="Parent response" value="Parent continued after the child handled ORDER_NOT_FOUND"/>
+  </flow>
+
+  <flow name="process-order-flow">
+    <raise-error doc:name="Raise order error" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+    <logger doc:name="Skipped after error" level="INFO" message="This child processor should not run after raise-error"/>
+    <error-handler>
+      <on-error-continue doc:name="Handle order error and continue" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger doc:name="Child handled error" level="INFO" message="#[ 'Child handler: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ++ ' - ' ++ error.description ]"/>
+        <set-payload doc:name="Child recovery response" value="Child handled ORDER_NOT_FOUND"/>
+      </on-error-continue>
+    </error-handler>
+  </flow>
+  <flow name="propagate-behavior-flow">
+    <http:listener doc:name="Listener" path="/errors/continue-vs-propagate/propagate" config-ref="HTTP_Listener_config"/>
+    <flow-ref doc:name="Process order with propagate" name="process-order-propagate-flow"/>
+    <logger doc:name="Parent skipped after propagate" level="INFO" message="Propagate parent resumed after process-order-propagate-flow"/>
+    <set-payload doc:name="Parent response if successful" value="Propagate parent continued after the child"/>
+  </flow>
+
+  <flow name="process-order-propagate-flow">
+    <raise-error doc:name="Raise order error" type="APP:ORDER_NOT_FOUND" description="Order not found"/>
+    <logger doc:name="Child skipped after error" level="INFO" message="Propagate child processor after raise-error should not run"/>
+    <error-handler>
+      <on-error-propagate doc:name="Log order error and propagate" type="APP:ORDER_NOT_FOUND" logException="true">
+        <logger doc:name="Child propagating error" level="INFO" message="#[ 'Child propagate handler: ' ++ (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String) ++ ' - ' ++ error.description ]"/>
+        <set-payload doc:name="Child error payload" value="Child propagated ORDER_NOT_FOUND"/>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- Runtime Fundamentals, experiment 3: maxConcurrency + threads.
+       Both flows take 3 seconds. Send 3 requests at once to each and compare.
+       The thread name is in each log line between the square brackets. -->
+  <flow name="runtime-concurrency-limited-flow" maxConcurrency="1">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/concurrency-limited" doc:name="Listener"/>
+    <logger level="INFO" message="LIMITED start #[correlationId]" doc:name="Log start"/>
+    <ee:transform doc:name="Slow work (3s)">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+import wait from dw::Runtime
+output application/json
+---
+wait({ flow: "limited" }, 3000)]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" message="LIMITED end #[correlationId]" doc:name="Log end"/>
+  </flow>
+
+  <flow name="runtime-concurrency-open-flow">
+    <http:listener config-ref="HTTP_Listener_config" path="/runtime/concurrency-open" doc:name="Listener"/>
+    <logger level="INFO" message="OPEN start #[correlationId]" doc:name="Log start"/>
+    <ee:transform doc:name="Slow work (3s)">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+import wait from dw::Runtime
+output application/json
+---
+wait({ flow: "open" }, 3000)]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" message="OPEN end #[correlationId]" doc:name="Log end"/>
+  </flow>
+</mule>
